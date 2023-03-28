@@ -73,6 +73,7 @@ if __name__ == "__main__":
     #     print ("Fatal: You forgot to include the directory name on the command line.")
     #     print ("Usage:  python %s <directoryname>" % sys.argv[0])
     #     sys.exit(1)
+    print(sys.argv[1])
     niid = True if sys.argv[1] == "noniid" else False
     balance = True if sys.argv[2] == "balance" else False
     partition = sys.argv[3] if sys.argv[3] != "-" else None

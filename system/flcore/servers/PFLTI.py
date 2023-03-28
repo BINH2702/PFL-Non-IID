@@ -7,12 +7,17 @@ class PFLTI(Server):
     def __init__(self, args, times):
         super().__init__(args, times)
 
-        #select clients
+        # select clients
         self.set_slow_clients()
         self.set_clients(args, clientPFLTI)
+        self.mom_model = copy.deepcopy(args.model)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
+
+    def mom_update(self):
+        for mom_param, param in zip (self.mom_model.parameters(), self.model.parameters()):
+            mom_param.data = 0.995 * mom_param.data.clone() + (1 - 0.995) * param.data.clone()
 
     def train(self):
         for i in range(self.global_rounds+1):
@@ -23,20 +28,16 @@ class PFLTI(Server):
             if i % self.eval_gap == 0:
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate global model with one step update")
-                self.evaluate_one_step()
+                self.evaluate_one_step() # Adaptation step
 
             # choose several clients to send back upated model to server
             for client in self.selected_clients:
                 client.train()
-                client.train()
-
-            # threads = [Thread(target=client.train)
-            #            for client in self.selected_clients]
-            # [t.start() for t in threads]
-            # [t.join() for t in threads]
+                # client.train()
 
             self.receive_models()
             self.aggregate_parameters()
+            self.mom_update()
 
             if self.auto_break and self.check_done(acc_lss=[self.rs_test_acc], top_cnt=self.top_cnt):
                 break

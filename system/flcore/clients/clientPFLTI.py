@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import time
 import copy
+import torch.nn.functional as F
 import torch.nn as nn
 from flcore.optimizers.fedoptimizer import PerAvgOptimizer
 from flcore.clients.clientbase import Client
@@ -42,11 +43,11 @@ class clientPFLTI(Client):
 
         for step in range(max_local_steps):  # local update
             for X, Y in trainloader:
-                temp_model = copy.deepcopy(list(self.model.parameters()))\
+                temp_model = copy.deepcopy(list(self.model.parameters()))
+                # temp_mom_model = copy.deepcopy(list(self.mom_model.parameters()))
 
-                # step 1: Adaptation for global model and momentum model
+                # Adaptation step
 
-                # Data preprocessing
                 if type(X) == type([]):
                     x = [None, None]
                     x[0] = X[0][:self.batch_size].to(self.device)
@@ -71,8 +72,7 @@ class clientPFLTI(Client):
                 loss_mom.backward()
                 self.optimizer_mom.step()
 
-
-                # step 2
+                # Calculate loss step
                 if type(X) == type([]):
                     x = [None, None]
                     x[0] = X[0][self.batch_size:].to(self.device)
@@ -84,7 +84,10 @@ class clientPFLTI(Client):
                     time.sleep(0.1 * np.abs(np.random.rand()))
                 self.optimizer.zero_grad()
                 output = self.model(x)
-                loss = self.loss(output, y)
+                loss_global = self.loss(output, y)
+                mom_output = self.mom_model(x)
+                kl_loss = self.KL_div(output, mom_output, temp=4)
+                loss = (1 - 0.5) * loss_global + 0.5 * kl_loss
                 loss.backward()
 
                 # restore the model parameters to the one before first update
@@ -101,6 +104,10 @@ class clientPFLTI(Client):
         self.train_time_cost['num_rounds'] += 1
         self.train_time_cost['total_cost'] += time.time() - start_time
 
+    def KL_div(self, student_output, teacher_output, temp):
+        p_s = F.log_softmax(student_output / temp, dim =1)
+        p_t = F.softmax(teacher_output / temp, dim=1)
+        return  F.kl_div(p_s, p_t, size_average=False) * (temp ** 2)
 
     def train_one_step(self):
         trainloader = self.load_train_data_one_step(self.batch_size)
@@ -121,7 +128,6 @@ class clientPFLTI(Client):
         self.optimizer.step()
 
         # self.model.cpu()
-
 
     def load_train_data_one_step(self, batch_size=None):
         if batch_size == None:
