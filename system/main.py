@@ -9,7 +9,6 @@ import numpy as np
 import torchvision
 import logging
 
-from flcore.servers.PFLTI import PFLTI
 from flcore.servers.serveravg import FedAvg
 from flcore.servers.serverpFedMe import pFedMe
 from flcore.servers.serverperavg import PerAvg
@@ -40,7 +39,6 @@ from flcore.trainmodel.bilstm import BiLSTM_TextClassification
 # from flcore.trainmodel.resnet import resnet18 as resnet
 from flcore.trainmodel.alexnet import alexnet
 from flcore.trainmodel.mobilenet_v2 import mobilenet_v2
-# from system.flcore.servers.PFLTI import PFLTI
 from utils.result_utils import average_data
 from utils.mem_utils import MemReporter
 
@@ -154,9 +152,7 @@ def run(args):
         print(args.model)
 
         # select algorithm
-        if args.algorithm == "PFLTI":
-            server = PFLTI(args, i)
-        elif args.algorithm == "FedAvg":
+        if args.algorithm == "FedAvg":
             server = FedAvg(args, i)
 
         elif args.algorithm == "Local":

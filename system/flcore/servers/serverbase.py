@@ -20,7 +20,6 @@ class Server(object):
         self.batch_size = args.batch_size
         self.learning_rate = args.local_learning_rate
         self.global_model = copy.deepcopy(args.model)
-        # self.mom_model = copy.deepcopy(args.model)
         self.num_clients = args.num_clients
         self.join_ratio = args.join_ratio
         self.random_join_ratio = args.random_join_ratio
