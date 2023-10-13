@@ -33,11 +33,11 @@ class clientpFedMe(Client):
         # self.model.to(self.device)
         self.model.train()
 
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
-        for step in range(max_local_steps):  # local update
+        for step in range(max_local_epochs):  # local update
             for x, y in trainloader:
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -49,9 +49,9 @@ class clientpFedMe(Client):
 
                 # K is number of personalized steps
                 for i in range(self.K):
-                    self.optimizer.zero_grad()
                     output = self.model(x)
                     loss = self.loss(output, y)
+                    self.optimizer.zero_grad()
                     loss.backward()
                     # finding aproximate theta
                     self.personalized_params = self.optimizer.step(self.local_params, self.device)
@@ -101,7 +101,7 @@ class clientpFedMe(Client):
         
         return test_acc, test_num
 
-    def train_accuracy_and_loss_personalized(self):
+    def train_metrics_personalized(self):
         trainloader = self.load_train_data()
         self.update_parameters(self.model, self.personalized_params)
         # self.model.to(self.device)
@@ -120,8 +120,8 @@ class clientpFedMe(Client):
                 output = self.model(x)
                 loss = self.loss(output, y).item()
 
-                lm = torch.concat([p.data.view(-1) for p in self.local_params], dim=0)
-                pm = torch.concat([p.data.view(-1) for p in self.personalized_params], dim=0)
+                lm = torch.cat([p.data.view(-1) for p in self.local_params], dim=0)
+                pm = torch.cat([p.data.view(-1) for p in self.personalized_params], dim=0)
                 loss += 0.5 * self.lamda * torch.norm(lm-pm, p=2)
 
                 train_acc += (torch.sum(torch.argmax(output, dim=1) == y)).item()

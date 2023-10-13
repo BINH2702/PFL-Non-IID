@@ -25,12 +25,12 @@ class clientDistill(Client):
         # self.model.to(self.device)
         self.model.train()
 
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
         logits = defaultdict(list)
-        for step in range(max_local_steps):
+        for step in range(max_local_epochs):
             for i, (x, y) in enumerate(trainloader):
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -39,21 +39,22 @@ class clientDistill(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                self.optimizer.zero_grad()
                 output = self.model(x)
                 loss = self.loss(output, y)
 
                 if self.global_logits != None:
-                    logit_new = torch.zeros_like(output)
+                    logit_new = copy.deepcopy(output.detach())
                     for i, yy in enumerate(y):
                         y_c = yy.item()
-                        logit_new[i, :] = self.global_logits[y_c].data
+                        if type(self.global_logits[y_c]) != type([]):
+                            logit_new[i, :] = self.global_logits[y_c].data
                     loss += self.loss_mse(logit_new, output) * self.lamda
 
                 for i, yy in enumerate(y):
                     y_c = yy.item()
                     logits[y_c].append(output[i, :].detach().data)
 
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
@@ -70,6 +71,40 @@ class clientDistill(Client):
 
     def set_logits(self, global_logits):
         self.global_logits = copy.deepcopy(global_logits)
+
+    def train_metrics(self):
+        trainloader = self.load_train_data()
+        # self.model = self.load_model('model')
+        # self.model.to(self.device)
+        self.model.eval()
+
+        train_num = 0
+        losses = 0
+        with torch.no_grad():
+            for x, y in trainloader:
+                if type(x) == type([]):
+                    x[0] = x[0].to(self.device)
+                else:
+                    x = x.to(self.device)
+                y = y.to(self.device)
+                output = self.model(x)
+                loss = self.loss(output, y)
+
+                if self.global_logits != None:
+                    logit_new = copy.deepcopy(output.detach())
+                    for i, yy in enumerate(y):
+                        y_c = yy.item()
+                        if type(self.global_logits[y_c]) != type([]):
+                            logit_new[i, :] = self.global_logits[y_c].data
+                    loss += self.loss_mse(logit_new, output) * self.lamda
+                    
+                train_num += y.shape[0]
+                losses += loss.item() * y.shape[0]
+
+        # self.model.cpu()
+        # self.save_model(self.model, 'model')
+
+        return losses, train_num
 
 
 # https://github.com/yuetan031/fedlogit/blob/main/lib/utils.py#L205

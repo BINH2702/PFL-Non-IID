@@ -32,11 +32,11 @@ class clientAPPLE(Client):
         # self.model.to(self.device)
         self.model.train()
 
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
-        for step in range(max_local_steps):
+        for step in range(max_local_epochs):
             for i, (x, y) in enumerate(trainloader):
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -48,9 +48,9 @@ class clientAPPLE(Client):
 
                 self.aggregate_parameters()
 
-                self.optimizer.zero_grad()
                 output = self.model(x)
                 loss = self.loss(output, y)
+                self.optimizer.zero_grad()
                 loss.backward()
 
                 for param_c, param in zip(self.model_cs[self.id].parameters(), self.model.parameters()):
@@ -70,6 +70,10 @@ class clientAPPLE(Client):
             self.lamda = (math.cos(R * math.pi / self.L) + 1) / 2
         else:
             self.lamda = 0
+
+        # recover self.model_cs[self.id] for other clients
+        for param_c, param_ in zip(self.model_cs[self.id].parameters(), self.model_c.parameters()):
+            param_c.data = param_.data.clone()
 
         self.model_c = copy.deepcopy(self.model)
 

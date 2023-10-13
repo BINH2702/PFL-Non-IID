@@ -10,7 +10,7 @@ class FedPer(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientPer)
+        self.set_clients(clientPer)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -37,6 +37,8 @@ class FedPer(Server):
             # [t.join() for t in threads]
 
             self.receive_models()
+            if self.dlg_eval and i%self.dlg_gap == 0:
+                self.call_dlg(i)
             self.aggregate_parameters()
 
             if self.auto_break and self.check_done(acc_lss=[self.rs_test_acc], top_cnt=self.top_cnt):
@@ -49,12 +51,19 @@ class FedPer(Server):
 
         self.save_results()
 
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientPer)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()
+
 
     def receive_models(self):
         assert (len(self.selected_clients) > 0)
 
         active_clients = random.sample(
-            self.selected_clients, int((1-self.client_drop_rate) * self.join_clients))
+            self.selected_clients, int((1-self.client_drop_rate) * self.current_num_join_clients))
 
         self.uploaded_weights = []
         self.uploaded_models = []

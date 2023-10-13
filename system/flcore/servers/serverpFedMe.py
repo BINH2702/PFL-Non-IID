@@ -12,7 +12,7 @@ class pFedMe(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientpFedMe)
+        self.set_clients(clientpFedMe)
 
         self.beta = args.beta
         self.rs_train_acc_per = []
@@ -32,6 +32,11 @@ class pFedMe(Server):
             #     print("\nEvaluate global model")
             #     self.evaluate()
 
+            if i%self.eval_gap == 0:
+                print(f"\n-------------Round number: {i}-------------")
+                print("\nEvaluate personalized model")
+                self.evaluate_personalized()
+
             for client in self.selected_clients:
                 client.train()
 
@@ -40,25 +45,22 @@ class pFedMe(Server):
             # [t.start() for t in threads]
             # [t.join() for t in threads]
 
-            if i%self.eval_gap == 0:
-                print(f"\n-------------Round number: {i}-------------")
-                print("\nEvaluate personalized model")
-                self.evaluate_personalized()
-
             self.previous_global_model = copy.deepcopy(list(self.global_model.parameters()))
             self.receive_models()
+            if self.dlg_eval and i%self.dlg_gap == 0:
+                self.call_dlg(i)
             self.aggregate_parameters()
             self.beta_aggregate_parameters()
 
-            if self.auto_break and self.check_done(acc_lss=[self.rs_test_acc], top_cnt=self.top_cnt):
+            if self.auto_break and self.check_done(acc_lss=[self.rs_test_acc_per], top_cnt=self.top_cnt):
                 break
 
-        # print("\nBest accuracy.")
+        # print("\nBest global accuracy.")
         # # self.print_(max(self.rs_test_acc), max(
         # #     self.rs_train_acc), min(self.rs_train_loss))
         # print(max(self.rs_test_acc))
 
-        print("\nBest personalized results.")
+        print("\nBest accuracy.")
         # self.print_(max(self.rs_test_acc_per), max(
         #     self.rs_train_acc_per), min(self.rs_train_loss_per))
         print(max(self.rs_test_acc_per))
@@ -67,6 +69,13 @@ class pFedMe(Server):
         self.save_results()
         self.save_global_model()
 
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientpFedMe)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()
+
 
     def beta_aggregate_parameters(self):
         # aggregate avergage model with previous model using parameter beta
@@ -74,6 +83,10 @@ class pFedMe(Server):
             param.data = (1 - self.beta)*pre_param.data + self.beta*param.data
 
     def test_metrics_personalized(self):
+        if self.eval_new_clients and self.num_new_clients > 0:
+            self.fine_tuning_new_clients()
+            return self.test_metrics_new_clients()
+        
         num_samples = []
         tot_correct = []
         for c in self.clients:
@@ -85,6 +98,9 @@ class pFedMe(Server):
         return ids, num_samples, tot_correct
 
     def train_metrics_personalized(self):
+        if self.eval_new_clients and self.num_new_clients > 0:
+            return [0], [1], [0]
+        
         num_samples = []
         tot_correct = []
         losses = []
@@ -100,7 +116,7 @@ class pFedMe(Server):
 
     def evaluate_personalized(self):
         stats = self.test_metrics_personalized()
-        stats_train = self.train_accuracy_and_loss_personalized()
+        stats_train = self.train_metrics_personalized()
 
         test_acc = sum(stats[2])*1.0 / sum(stats[1])
         train_acc = sum(stats_train[2])*1.0 / sum(stats_train[1])

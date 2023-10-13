@@ -22,11 +22,11 @@ class clientAMP(Client):
         # self.model.to(self.device)
         self.model.train()
         
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
-        for step in range(max_local_steps):
+        for step in range(max_local_epochs):
             for x, y in trainloader:
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -35,14 +35,14 @@ class clientAMP(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                self.optimizer.zero_grad()
                 output = self.model(x)
                 loss = self.loss(output, y)
 
-                gm = torch.concat([p.data.view(-1) for p in self.model.parameters()], dim=0)
-                pm = torch.concat([p.data.view(-1) for p in self.client_u.parameters()], dim=0)
+                gm = torch.cat([p.data.view(-1) for p in self.model.parameters()], dim=0)
+                pm = torch.cat([p.data.view(-1) for p in self.client_u.parameters()], dim=0)
                 loss += 0.5 * self.lamda/self.alphaK * torch.norm(gm-pm, p=2)
 
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
@@ -56,8 +56,8 @@ class clientAMP(Client):
 
 
     def set_parameters(self, model, coef_self):
-        for new_param, old_param in zip(model.parameters(), self.client_u.parameters()):
-            old_param.data = (new_param.data + coef_self * old_param.data).clone()
+        for new_param, old_param, self_param in zip(model.parameters(), self.client_u.parameters(), self.model.parameters()):
+            old_param.data = (new_param.data + coef_self * self_param.data).clone()
 
 
     def train_metrics(self, model=None):
@@ -78,8 +78,8 @@ class clientAMP(Client):
                 output = self.model(x)
                 loss = self.loss(output, y)
 
-                gm = torch.concat([p.data.view(-1) for p in self.model.parameters()], dim=0)
-                pm = torch.concat([p.data.view(-1) for p in self.client_u.parameters()], dim=0)
+                gm = torch.cat([p.data.view(-1) for p in self.model.parameters()], dim=0)
+                pm = torch.cat([p.data.view(-1) for p in self.client_u.parameters()], dim=0)
                 loss += 0.5 * self.lamda/self.alphaK * torch.norm(gm-pm, p=2)
 
                 train_num += y.shape[0]

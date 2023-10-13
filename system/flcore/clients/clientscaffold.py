@@ -22,10 +22,6 @@ class clientSCAFFOLD(Client):
         for param in self.model.parameters():
             self.client_c.append(torch.zeros_like(param))
         self.global_c = None
-
-        self.delta_c = None
-        self.delta_y = None
-
         self.global_model = None
 
     def train(self):
@@ -40,11 +36,11 @@ class clientSCAFFOLD(Client):
         
         start_time = time.time()
 
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
-        for step in range(max_local_steps):
+        for step in range(max_local_epochs):
             for i, (x, y) in enumerate(trainloader):
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -53,15 +49,16 @@ class clientSCAFFOLD(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                self.optimizer.zero_grad()
                 output = self.model(x)
                 loss = self.loss(output, y)
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step(self.global_c, self.client_c)
 
         # self.model.cpu()
         self.num_batches = len(trainloader)
         self.update_yc()
+        # self.delta_c, self.delta_y = self.delta_yc()
 
         if self.learning_rate_decay:
             self.learning_rate_scheduler.step()
@@ -82,10 +79,15 @@ class clientSCAFFOLD(Client):
         self.global_model = model
 
     def update_yc(self):
-        self.delta_c = []
-        self.delta_y = []
         for ci, c, x, yi in zip(self.client_c, self.global_c, self.global_model.parameters(), self.model.parameters()):
-            self.delta_c.append(- c + 1/self.num_batches/self.learning_rate * (x - yi))
-            ci.data = ci + self.delta_c[-1]
-            self.delta_y.append(yi - x)
+            ci.data = ci - c + 1/self.num_batches/self.learning_rate * (x - yi)
+
+    def delta_yc(self):
+        delta_y = []
+        delta_c = []
+        for c, x, yi in zip(self.global_c, self.global_model.parameters(), self.model.parameters()):
+            delta_y.append(yi - x)
+            delta_c.append(- c + 1/self.num_batches/self.learning_rate * (x - yi))
+
+        return delta_y, delta_c
 

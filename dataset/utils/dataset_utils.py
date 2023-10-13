@@ -59,7 +59,7 @@ def separate_data(data, num_clients, num_classes, niid=False, balance=False, par
             for client in range(num_clients):
                 if class_num_per_client[client] > 0:
                     selected_clients.append(client)
-                selected_clients = selected_clients[:int(num_clients/num_classes*class_per_client)]
+                selected_clients = selected_clients[:int(np.ceil((num_clients/num_classes)*class_per_client))]
 
             num_all_samples = len(idx_for_each_class[i])
             num_selected_clients = len(selected_clients)
@@ -85,7 +85,7 @@ def separate_data(data, num_clients, num_classes, niid=False, balance=False, par
         K = num_classes
         N = len(dataset_label)
 
-        while min_size < least_samples:
+        while min_size < num_classes:
             idx_batch = [[] for _ in range(num_clients)]
             for k in range(K):
                 idx_k = np.where(dataset_label == k)[0]

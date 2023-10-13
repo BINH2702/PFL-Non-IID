@@ -12,7 +12,7 @@ class Ditto(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientDitto)
+        self.set_clients(clientDitto)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -32,6 +32,10 @@ class Ditto(Server):
                 print("\nEvaluate global models")
                 self.evaluate()
 
+            if i%self.eval_gap == 0:
+                print("\nEvaluate personalized models")
+                self.evaluate_personalized()
+
             for client in self.selected_clients:
                 client.ptrain()
                 client.train()
@@ -41,11 +45,9 @@ class Ditto(Server):
             # [t.start() for t in threads]
             # [t.join() for t in threads]
 
-            if i%self.eval_gap == 0:
-                print("\nEvaluate personalized models")
-                self.evaluate_personalized()
-
             self.receive_models()
+            if self.dlg_eval and i%self.dlg_gap == 0:
+                self.call_dlg(i)
             self.aggregate_parameters()
 
             self.Budget.append(time.time() - s_t)
@@ -64,8 +66,19 @@ class Ditto(Server):
         self.save_results()
         self.save_global_model()
 
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientDitto)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()
+
 
     def test_metrics_personalized(self):
+        if self.eval_new_clients and self.num_new_clients > 0:
+            self.fine_tuning_new_clients()
+            return self.test_metrics_new_clients()
+        
         num_samples = []
         tot_correct = []
         tot_auc = []
@@ -80,6 +93,9 @@ class Ditto(Server):
         return ids, num_samples, tot_correct, tot_auc
 
     def train_metrics_personalized(self):
+        if self.eval_new_clients and self.num_new_clients > 0:
+            return [0], [1], [0]
+        
         num_samples = []
         losses = []
         for c in self.clients:

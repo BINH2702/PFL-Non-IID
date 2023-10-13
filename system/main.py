@@ -32,13 +32,24 @@ from flcore.servers.serverapple import APPLE
 from flcore.servers.servergen import FedGen
 from flcore.servers.serverscaffold import SCAFFOLD
 from flcore.servers.serverdistill import FedDistill
+from flcore.servers.serverala import FedALA
+from flcore.servers.serverpac import FedPAC
+from flcore.servers.serverlg import LG_FedAvg
+from flcore.servers.servergc import FedGC
+from flcore.servers.serverfml import FML
+from flcore.servers.serverkd import FedKD
+from flcore.servers.serverpcl import FedPCL
+from flcore.servers.servercp import FedCP
+from flcore.servers.servergpfl import GPFL
 
 from flcore.trainmodel.models import *
 
-from flcore.trainmodel.bilstm import BiLSTM_TextClassification
-# from flcore.trainmodel.resnet import resnet18 as resnet
-from flcore.trainmodel.alexnet import alexnet
-from flcore.trainmodel.mobilenet_v2 import mobilenet_v2
+from flcore.trainmodel.bilstm import *
+from flcore.trainmodel.resnet import *
+from flcore.trainmodel.alexnet import *
+from flcore.trainmodel.mobilenet_v2 import *
+from flcore.trainmodel.transformer import *
+
 from utils.result_utils import average_data
 from utils.mem_utils import MemReporter
 
@@ -65,31 +76,31 @@ def run(args):
         start = time.time()
 
         # Generate args.model
-        if model_str == "mlr":
-            if args.dataset == "mnist" or args.dataset == "fmnist":
+        if model_str == "mlr": # convex
+            if "mnist" in args.dataset:
                 args.model = Mclr_Logistic(1*28*28, num_classes=args.num_classes).to(args.device)
-            elif args.dataset == "Cifar10" or args.dataset == "Cifar100":
+            elif "Cifar10" in args.dataset:
                 args.model = Mclr_Logistic(3*32*32, num_classes=args.num_classes).to(args.device)
             else:
                 args.model = Mclr_Logistic(60, num_classes=args.num_classes).to(args.device)
 
-        elif model_str == "cnn":
-            if args.dataset == "mnist" or args.dataset == "fmnist":
+        elif model_str == "cnn": # non-convex
+            if "mnist" in args.dataset:
                 args.model = FedAvgCNN(in_features=1, num_classes=args.num_classes, dim=1024).to(args.device)
-            elif args.dataset == "omniglot":
-                args.model = FedAvgCNN(in_features=1, num_classes=args.num_classes, dim=33856).to(args.device)
-            elif args.dataset == "Cifar10" or args.dataset == "Cifar100":
+            elif "Cifar10" in args.dataset:
                 args.model = FedAvgCNN(in_features=3, num_classes=args.num_classes, dim=1600).to(args.device)
+            elif "omniglot" in args.dataset:
+                args.model = FedAvgCNN(in_features=1, num_classes=args.num_classes, dim=33856).to(args.device)
                 # args.model = CifarNet(num_classes=args.num_classes).to(args.device)
-            elif args.dataset == "Digit5":
+            elif "Digit5" in args.dataset:
                 args.model = Digit5CNN().to(args.device)
             else:
                 args.model = FedAvgCNN(in_features=3, num_classes=args.num_classes, dim=10816).to(args.device)
 
         elif model_str == "dnn": # non-convex
-            if args.dataset == "mnist" or args.dataset == "fmnist":
+            if "mnist" in args.dataset:
                 args.model = DNN(1*28*28, 100, num_classes=args.num_classes).to(args.device)
-            elif args.dataset == "Cifar10" or args.dataset == "Cifar100":
+            elif "Cifar10" in args.dataset:
                 args.model = DNN(3*32*32, 100, num_classes=args.num_classes).to(args.device)
             else:
                 args.model = DNN(60, 20, num_classes=args.num_classes).to(args.device)
@@ -125,7 +136,7 @@ def run(args):
             # args.model.fc = nn.Linear(feature_dim, args.num_classes).to(args.device)
             
         elif model_str == "lstm":
-            args.model = LSTMNet(emb_dim=emb_dim, vocab_size=vocab_size, num_classes=args.num_classes).to(args.device)
+            args.model = LSTMNet(hidden_dim=emb_dim, vocab_size=vocab_size, num_classes=args.num_classes).to(args.device)
 
         elif model_str == "bilstm":
             args.model = BiLSTM_TextClassification(input_size=vocab_size, hidden_size=emb_dim, output_size=args.num_classes, 
@@ -133,18 +144,24 @@ def run(args):
                         embedding_length=emb_dim).to(args.device)
 
         elif model_str == "fastText":
-            args.model = fastText(emb_dim=emb_dim, vocab_size=vocab_size, num_classes=args.num_classes).to(args.device)
+            args.model = fastText(hidden_dim=emb_dim, vocab_size=vocab_size, num_classes=args.num_classes).to(args.device)
 
         elif model_str == "TextCNN":
-            args.model = TextCNN(emb_dim=emb_dim, max_len=max_len, vocab_size=vocab_size, 
+            args.model = TextCNN(hidden_dim=emb_dim, max_len=max_len, vocab_size=vocab_size, 
                             num_classes=args.num_classes).to(args.device)
 
         elif model_str == "Transformer":
-            args.model = TransformerModel(ntoken=vocab_size, d_model=emb_dim, nhead=2, d_hid=emb_dim, nlayers=2, 
+            args.model = TransformerModel(ntoken=vocab_size, d_model=emb_dim, nhead=8, d_hid=emb_dim, nlayers=2, 
                             num_classes=args.num_classes).to(args.device)
         
         elif model_str == "AmazonMLP":
             args.model = AmazonMLP().to(args.device)
+
+        elif model_str == "harcnn":
+            if args.dataset == 'har':
+                args.model = HARCNN(9, dim_hidden=1664, num_classes=args.num_classes, conv_kernel_size=(1, 9), pool_kernel_size=(1, 2)).to(args.device)
+            elif args.dataset == 'pamap':
+                args.model = HARCNN(9, dim_hidden=3712, num_classes=args.num_classes, conv_kernel_size=(1, 9), pool_kernel_size=(1, 2)).to(args.device)
 
         else:
             raise NotImplementedError
@@ -153,6 +170,9 @@ def run(args):
 
         # select algorithm
         if args.algorithm == "FedAvg":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
             server = FedAvg(args, i)
 
         elif args.algorithm == "Local":
@@ -244,6 +264,52 @@ def run(args):
 
         elif args.algorithm == "FedDistill":
             server = FedDistill(args, i)
+
+        elif args.algorithm == "FedALA":
+            server = FedALA(args, i)
+
+        elif args.algorithm == "FedPAC":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
+            server = FedPAC(args, i)
+
+        elif args.algorithm == "LG-FedAvg":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
+            server = LG_FedAvg(args, i)
+
+        elif args.algorithm == "FedGC":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
+            server = FedGC(args, i)
+
+        elif args.algorithm == "FML":
+            server = FML(args, i)
+
+        elif args.algorithm == "FedKD":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
+            server = FedKD(args, i)
+
+        elif args.algorithm == "FedPCL":
+            args.model.fc = nn.Identity()
+            server = FedPCL(args, i)
+
+        elif args.algorithm == "FedCP":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
+            server = FedCP(args, i)
+
+        elif args.algorithm == "GPFL":
+            args.head = copy.deepcopy(args.model.fc)
+            args.model.fc = nn.Identity()
+            args.model = BaseHeadSplit(args.model, args.head)
+            server = GPFL(args, i)
             
         else:
             raise NotImplementedError
@@ -281,8 +347,9 @@ if __name__ == "__main__":
                         help="Local learning rate")
     parser.add_argument('-ld', "--learning_rate_decay", type=bool, default=False)
     parser.add_argument('-ldg', "--learning_rate_decay_gamma", type=float, default=0.99)
-    parser.add_argument('-gr', "--global_rounds", type=int, default=1000)
-    parser.add_argument('-ls', "--local_steps", type=int, default=1)
+    parser.add_argument('-gr', "--global_rounds", type=int, default=2000)
+    parser.add_argument('-ls', "--local_epochs", type=int, default=1, 
+                        help="Multiple update steps in one local epoch.")
     parser.add_argument('-algo', "--algorithm", type=str, default="FedAvg")
     parser.add_argument('-jr', "--join_ratio", type=float, default=1.0,
                         help="Ratio of clients per round")
@@ -301,6 +368,11 @@ if __name__ == "__main__":
     parser.add_argument('-dps', "--dp_sigma", type=float, default=0.0)
     parser.add_argument('-sfn', "--save_folder_name", type=str, default='items')
     parser.add_argument('-ab', "--auto_break", type=bool, default=False)
+    parser.add_argument('-dlg', "--dlg_eval", type=bool, default=False)
+    parser.add_argument('-dlgg', "--dlg_gap", type=int, default=100)
+    parser.add_argument('-bnpc', "--batch_num_per_client", type=int, default=2)
+    parser.add_argument('-nnc', "--num_new_clients", type=int, default=0)
+    parser.add_argument('-fte', "--fine_tuning_epoch", type=int, default=0)
     # practical
     parser.add_argument('-cdr', "--client_drop_rate", type=float, default=0.0,
                         help="Rate for clients that train but drop out")
@@ -339,9 +411,9 @@ if __name__ == "__main__":
     # Ditto / FedRep
     parser.add_argument('-pls', "--plocal_steps", type=int, default=1)
     # MOON
-    parser.add_argument('-ta', "--tau", type=float, default=1.0)
+    parser.add_argument('-tau', "--tau", type=float, default=1.0)
     # FedBABU
-    parser.add_argument('-fts', "--fine_tuning_steps", type=int, default=1)
+    parser.add_argument('-fts', "--fine_tuning_steps", type=int, default=10)
     # APPLE
     parser.add_argument('-dlr', "--dr_learning_rate", type=float, default=0.0)
     parser.add_argument('-L', "--L", type=float, default=1.0)
@@ -353,6 +425,17 @@ if __name__ == "__main__":
     parser.add_argument('-lf', "--localize_feature_extractor", type=bool, default=False)
     # SCAFFOLD
     parser.add_argument('-slr', "--server_learning_rate", type=float, default=1.0)
+    # FedALA
+    parser.add_argument('-et', "--eta", type=float, default=1.0)
+    parser.add_argument('-s', "--rand_percent", type=int, default=80)
+    parser.add_argument('-p', "--layer_idx", type=int, default=2,
+                        help="More fine-graind than its original paper.")
+    # FedKD
+    parser.add_argument('-mlr', "--mentee_learning_rate", type=float, default=0.005)
+    parser.add_argument('-Ts', "--T_start", type=float, default=0.95)
+    parser.add_argument('-Te', "--T_end", type=float, default=0.98)
+    # GPFL
+    parser.add_argument('-lamr', "--lamda_reg", type=float, default=0.0)
 
 
     args = parser.parse_args()
@@ -367,7 +450,7 @@ if __name__ == "__main__":
 
     print("Algorithm: {}".format(args.algorithm))
     print("Local batch size: {}".format(args.batch_size))
-    print("Local steps: {}".format(args.local_steps))
+    print("Local steps: {}".format(args.local_epochs))
     print("Local learing rate: {}".format(args.local_learning_rate))
     print("Local learing rate decay: {}".format(args.learning_rate_decay))
     if args.learning_rate_decay:
@@ -392,6 +475,11 @@ if __name__ == "__main__":
         print("Global rounds: {}".format(args.global_rounds))
     if args.device == "cuda":
         print("Cuda device id: {}".format(os.environ["CUDA_VISIBLE_DEVICES"]))
+    print("DLG attack: {}".format(args.dlg_eval))
+    if args.dlg_eval:
+        print("DLG attack round gap: {}".format(args.dlg_gap))
+    print("Total number of new clients: {}".format(args.num_new_clients))
+    print("Fine tuning epoches on new clients: {}".format(args.fine_tuning_epoch))
     print("=" * 50)
 
 

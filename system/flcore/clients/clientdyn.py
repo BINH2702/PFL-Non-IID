@@ -25,11 +25,11 @@ class clientDyn(Client):
         # self.model.to(self.device)
         self.model.train()
 
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
-        for step in range(max_local_steps):
+        for step in range(max_local_epochs):
             for i, (x, y) in enumerate(trainloader):
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -38,7 +38,6 @@ class clientDyn(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                self.optimizer.zero_grad()
                 output = self.model(x)
                 loss = self.loss(output, y)
 
@@ -47,6 +46,7 @@ class clientDyn(Client):
                     loss += self.alpha/2 * torch.norm(v1 - self.global_model_vector, 2)
                     loss -= torch.dot(v1, self.old_grad)
 
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
@@ -102,4 +102,4 @@ class clientDyn(Client):
 
 def model_parameter_vector(model):
     param = [p.view(-1) for p in model.parameters()]
-    return torch.concat(param, dim=0)
+    return torch.cat(param, dim=0)

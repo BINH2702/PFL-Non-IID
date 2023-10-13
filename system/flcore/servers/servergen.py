@@ -16,7 +16,7 @@ class FedGen(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientGen)
+        self.set_clients(clientGen)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -43,6 +43,8 @@ class FedGen(Server):
         for client in self.clients:
             for yy in range(self.num_classes):
                 self.qualified_labels.extend([yy for _ in range(int(client.sample_per_class[yy].item()))])
+        for client in self.clients:
+            client.qualified_labels = self.qualified_labels
 
         self.server_epochs = args.server_epochs
         self.localize_feature_extractor = args.localize_feature_extractor
@@ -70,6 +72,8 @@ class FedGen(Server):
             # [t.join() for t in threads]
 
             self.receive_models()
+            if self.dlg_eval and i%self.dlg_gap == 0:
+                self.call_dlg(i)
             self.train_generator()
             self.aggregate_parameters()
 
@@ -89,6 +93,13 @@ class FedGen(Server):
         self.save_results()
         self.save_global_model()
 
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientGen)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()
+
 
     def send_models(self):
         assert (len(self.clients) > 0)
@@ -96,7 +107,7 @@ class FedGen(Server):
         for client in self.clients:
             start_time = time.time()
             
-            client.set_parameters(self.global_model, self.generative_model, self.qualified_labels)
+            client.set_parameters(self.global_model, self.generative_model)
 
             client.send_time_cost['num_rounds'] += 1
             client.send_time_cost['total_cost'] += 2 * (time.time() - start_time)
@@ -105,7 +116,7 @@ class FedGen(Server):
         assert (len(self.selected_clients) > 0)
 
         active_clients = random.sample(
-            self.selected_clients, int((1-self.client_drop_rate) * self.join_clients))
+            self.selected_clients, int((1-self.client_drop_rate) * self.current_num_join_clients))
 
         self.uploaded_ids = []
         self.uploaded_weights = []
@@ -151,7 +162,29 @@ class FedGen(Server):
         
         self.generative_learning_rate_scheduler.step()
 
+    # fine-tuning on new clients
+    def fine_tuning_new_clients(self):
+        for client in self.new_clients:
+            client.set_parameters(self.global_model, self.generative_model, self.qualified_labels)
+            opt = torch.optim.SGD(client.model.parameters(), lr=self.learning_rate)
+            CEloss = torch.nn.CrossEntropyLoss()
+            trainloader = client.load_train_data()
+            client.model.train()
+            for e in range(self.fine_tuning_epoch):
+                for i, (x, y) in enumerate(trainloader):
+                    if type(x) == type([]):
+                        x[0] = x[0].to(client.device)
+                    else:
+                        x = x.to(client.device)
+                    y = y.to(client.device)
+                    output = client.model(x)
+                    loss = CEloss(output, y)
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
 
+
+# based on official code https://github.com/zhuangdizhu/FedGen/blob/main/FLAlgorithms/trainmodel/generator.py
 class Generative(nn.Module):
     def __init__(self, noise_dim, num_classes, hidden_dim, feature_dim, device) -> None:
         super().__init__()

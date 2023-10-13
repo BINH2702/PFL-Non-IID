@@ -30,11 +30,11 @@ class clientProx(Client):
         # self.model.to(self.device)
         self.model.train()
 
-        max_local_steps = self.local_steps
+        max_local_epochs = self.local_epochs
         if self.train_slow:
-            max_local_steps = np.random.randint(1, max_local_steps // 2)
+            max_local_epochs = np.random.randint(1, max_local_epochs // 2)
 
-        for step in range(max_local_steps):
+        for step in range(max_local_epochs):
             for x, y in trainloader:
                 if type(x) == type([]):
                     x[0] = x[0].to(self.device)
@@ -43,9 +43,9 @@ class clientProx(Client):
                 y = y.to(self.device)
                 if self.train_slow:
                     time.sleep(0.1 * np.abs(np.random.rand()))
-                self.optimizer.zero_grad()
                 output = self.model(x)
                 loss = self.loss(output, y)
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step(self.global_params, self.device)
 
@@ -81,8 +81,8 @@ class clientProx(Client):
                 output = self.model(x)
                 loss = self.loss(output, y)
 
-                gm = torch.concat([p.data.view(-1) for p in self.global_params], dim=0)
-                pm = torch.concat([p.data.view(-1) for p in self.model.parameters()], dim=0)
+                gm = torch.cat([p.data.view(-1) for p in self.global_params], dim=0)
+                pm = torch.cat([p.data.view(-1) for p in self.model.parameters()], dim=0)
                 loss += 0.5 * self.mu * torch.norm(gm-pm, p=2)
 
                 train_num += y.shape[0]

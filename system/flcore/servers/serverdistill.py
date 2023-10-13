@@ -1,6 +1,5 @@
 from flcore.clients.clientdistill import clientDistill
 from flcore.servers.serverbase import Server
-from utils.data_utils import read_client_data
 from threading import Thread
 import time
 import numpy as np
@@ -13,7 +12,7 @@ class FedDistill(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientDistill)
+        self.set_clients(clientDistill)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -59,6 +58,7 @@ class FedDistill(Server):
         print(sum(self.Budget[1:])/len(self.Budget[1:]))
 
         self.save_results()
+        
 
     def send_logits(self):
         assert (len(self.clients) > 0)

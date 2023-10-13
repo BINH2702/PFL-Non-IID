@@ -11,7 +11,7 @@ class FedBN(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientBN)
+        self.set_clients(clientBN)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -49,3 +49,10 @@ class FedBN(Server):
         print(max(self.rs_test_acc))
 
         self.save_results()
+
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientBN)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()

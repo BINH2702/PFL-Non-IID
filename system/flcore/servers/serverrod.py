@@ -11,7 +11,7 @@ class FedROD(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientROD)
+        self.set_clients(clientROD)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -38,6 +38,8 @@ class FedROD(Server):
             # [t.join() for t in threads]
 
             self.receive_models()
+            if self.dlg_eval and i%self.dlg_gap == 0:
+                self.call_dlg(i)
             self.aggregate_parameters()
 
             if self.auto_break and self.check_done(acc_lss=[self.rs_test_acc], top_cnt=self.top_cnt):
@@ -49,3 +51,10 @@ class FedROD(Server):
         print(max(self.rs_test_acc))
 
         self.save_results()
+
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientROD)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()

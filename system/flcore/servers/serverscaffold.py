@@ -1,7 +1,6 @@
 import copy
 import random
 import time
-
 import torch
 from flcore.clients.clientscaffold import clientSCAFFOLD
 from flcore.servers.serverbase import Server
@@ -14,7 +13,7 @@ class SCAFFOLD(Server):
 
         # select slow clients
         self.set_slow_clients()
-        self.set_clients(args, clientSCAFFOLD)
+        self.set_clients(clientSCAFFOLD)
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -48,6 +47,8 @@ class SCAFFOLD(Server):
             # [t.join() for t in threads]
 
             self.receive_models()
+            if self.dlg_eval and i%self.dlg_gap == 0:
+                self.call_dlg(i)
             self.aggregate_parameters()
 
             self.Budget.append(time.time() - s_t)
@@ -66,6 +67,13 @@ class SCAFFOLD(Server):
         self.save_results()
         self.save_global_model()
 
+        if self.num_new_clients > 0:
+            self.eval_new_clients = True
+            self.set_new_clients(clientSCAFFOLD)
+            print(f"\n-------------Fine tuning round-------------")
+            print("\nEvaluate new clients")
+            self.evaluate()
+
 
     def send_models(self):
         assert (len(self.clients) > 0)
@@ -82,13 +90,13 @@ class SCAFFOLD(Server):
         assert (len(self.selected_clients) > 0)
 
         active_clients = random.sample(
-            self.selected_clients, int((1-self.client_drop_rate) * self.join_clients))
+            self.selected_clients, int((1-self.client_drop_rate) * self.current_num_join_clients))
 
         self.uploaded_ids = []
         self.uploaded_weights = []
-        self.delta_ys = []
-        self.delta_cs = []
         tot_samples = 0
+        # self.delta_ys = []
+        # self.delta_cs = []
         for client in active_clients:
             try:
                 client_time_cost = client.train_time_cost['total_cost'] / client.train_time_cost['num_rounds'] + \
@@ -99,16 +107,48 @@ class SCAFFOLD(Server):
                 tot_samples += client.train_samples
                 self.uploaded_ids.append(client.id)
                 self.uploaded_weights.append(client.train_samples)
-                self.delta_ys.append(client.delta_y)
-                self.delta_cs.append(client.delta_c)
+                # self.delta_ys.append(client.delta_y)
+                # self.delta_cs.append(client.delta_c)
         for i, w in enumerate(self.uploaded_weights):
             self.uploaded_weights[i] = w / tot_samples
 
-    def aggregate_parameters(self):
-        assert (len(self.delta_ys) > 0)
-            
-        for w, dy, dc in zip(self.uploaded_weights, self.delta_ys, self.delta_cs):
-            for server_param, client_param in zip(self.global_model.parameters(), dy):
-                server_param.data += client_param.data.clone() * w * self.server_learning_rate
-            for server_param, client_param in zip(self.global_c, dc):
-                server_param.data += client_param.data.clone() * self.join_clients / self.num_clients
+    def aggregate_parameters(self):        
+        # original version
+        # for dy, dc in zip(self.delta_ys, self.delta_cs):
+        #     for server_param, client_param in zip(self.global_model.parameters(), dy):
+        #         server_param.data += client_param.data.clone() / self.num_join_clients * self.server_learning_rate
+        #     for server_param, client_param in zip(self.global_c, dc):
+        #         server_param.data += client_param.data.clone() / self.num_clients
+        
+        # save GPU memory
+        global_model = copy.deepcopy(self.global_model)
+        global_c = copy.deepcopy(self.global_c)
+        for cid in self.uploaded_ids:
+            dy, dc = self.clients[cid].delta_yc()
+            for server_param, client_param in zip(global_model.parameters(), dy):
+                server_param.data += client_param.data.clone() / self.num_join_clients * self.server_learning_rate
+            for server_param, client_param in zip(global_c, dc):
+                server_param.data += client_param.data.clone() / self.num_clients
+        self.global_model = global_model
+        self.global_c = global_c
+
+    # fine-tuning on new clients
+    def fine_tuning_new_clients(self):
+        for client in self.new_clients:
+            client.set_parameters(self.global_model, self.global_c)
+            opt = torch.optim.SGD(client.model.parameters(), lr=self.learning_rate)
+            CEloss = torch.nn.CrossEntropyLoss()
+            trainloader = client.load_train_data()
+            client.model.train()
+            for e in range(self.fine_tuning_epoch):
+                for i, (x, y) in enumerate(trainloader):
+                    if type(x) == type([]):
+                        x[0] = x[0].to(client.device)
+                    else:
+                        x = x.to(client.device)
+                    y = y.to(client.device)
+                    output = client.model(x)
+                    loss = CEloss(output, y)
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
